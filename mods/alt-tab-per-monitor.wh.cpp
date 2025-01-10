@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              alt-tab-per-monitor
 // @name            Alt+Tab per monitor
-// @description     Pressing Alt+Tab shows all open windows on the primary display. This mod shows only the windows on the monitor where the cursor is.
-// @version         1.0.0
-// @author          L3r0y
+// @description     Shows windows on current monitor with the cursor for Alt+Tab, but shows all windows on all monitors when using Win+Alt+Tab (Default Windows Behaviour)
+// @version         1.0.1
+// @author          L3r0y, SpacEagle17
 // @github          https://github.com/L3r0yThingz
 // @include         explorer.exe
 // @architecture    x86-64
@@ -18,11 +18,12 @@ When you press the Alt+Tab combination, the window switcher will appear on the
 primary display, showing all open windows across all monitors. This mod
 customizes the behavior to display the switcher on the monitor where the cursor
 is currently located, showing only the windows present on that specific monitor.
+Additionally, the previous known windows behaviour can still be archived by pressing
+Win+Alt+Tab.
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
-
 #include <winrt/windows.foundation.collections.h>
 
 std::atomic<DWORD> g_threadIdForAltTabShowWindow;
@@ -31,7 +32,16 @@ std::atomic<DWORD> g_threadIdForXamlAltTabViewHost_CreateInstance;
 ULONGLONG g_CreateInstance_TickCount;
 constexpr ULONGLONG kDeltaThreshold = 200;
 
+bool IsWinKeyPressed() {
+    return (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
+}
+
 bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
+    // If Win key is pressed, return false to use default behavior
+    if (IsWinKeyPressed()) {
+        return false;
+    }
+
     POINT pt;
     if (!GetCursorPos(&pt)) {
         return false;
@@ -51,6 +61,23 @@ bool HandleAltTabWindow(winrt::Windows::Foundation::Rect* rect) {
     rect->Y = monInfo.rcWork.top;
 
     return true;
+}
+
+bool IsWindowOnCursorMonitor(HWND windowHandle) {
+    // If Win key is pressed, always return true to show all windows
+    if (IsWinKeyPressed()) {
+        return true;
+    }
+
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+
+    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    auto hMonFromWindow = MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
+
+    return hMon == hMonFromWindow;
 }
 
 void* CWin32ApplicationView_vtable;
@@ -81,19 +108,6 @@ HRESULT GetWindowHandleFromApplicationView(void* applicationView,
     }
 
     return hr;
-}
-
-bool IsWindowOnCursorMonitor(HWND windowHandle) {
-    POINT pt;
-    if (!GetCursorPos(&pt)) {
-        return false;
-    }
-
-    auto hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    auto hMonFromWindow =
-        MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
-
-    return hMon == hMonFromWindow;
 }
 
 using CVirtualDesktop_IsViewVisible_t = HRESULT(WINAPI*)(void* pThis,
